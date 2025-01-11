@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.history/
+*.sublime-workspace
+*.sublime-project
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+*.bak
+*.tmp
+
+# Secrets and Configuration
+secrets.toml
+.env.local
+.env.*.local
+config.local.yaml
+credentials.json
