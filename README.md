@@ -40,6 +40,9 @@ Below is a minimal example demonstrating how to configure a Sculptor to extract 
 
 ```python
 from sculptor.sculptor import Sculptor
+import os
+
+
 
 # Suppose you have some AI record to analyze:
 sample_ai_record = {
@@ -47,8 +50,11 @@ sample_ai_record = {
     "text": "Hello! I am a hyper-intelligent AI named 'Aisaac'. My level is AGI."
 }
 
+# Set your OpenAI API key
+os.environ["OPENAI_API_KEY"] = "your-api-key-here"  # Or pass into Sculptor
+
 # Create a Sculptor and define a schema
-level_sculptor = Sculptor(model="gpt-4o-mini")
+level_sculptor = Sculptor(model="gpt-4o-mini")  # Or pass api_key="your-key" here
 
 # Add fields (name, type, description, etc.)
 level_sculptor.add(
@@ -68,6 +74,47 @@ extracted = level_sculptor.sculpt(sample_ai_record, merge_input=False)
 print("Extracted Fields (single record):")
 for k, v in extracted.items():
     print(f"{k} => {v}")
+```
+
+## Configuration
+
+### API Keys and Endpoints
+
+Sculptor requires an LLM API to function. By default, it uses the OpenAI API, which requires:
+1. An OpenAI API key set in the `OPENAI_API_KEY` environment variable, or
+2. Passing the API key when instantiating:
+```python
+sculptor = Sculptor(api_key="your-api-key-here")
+```
+
+You can also use any OpenAI-compatible API by specifying both the API key and base URL:
+```python
+sculptor = Sculptor(
+    api_key="your-alternative-api-key",
+    base_url="https://your-api-endpoint.com/v1"
+)
+```
+
+Different Sculptors in a pipeline can use different APIs - a common pattern is using a cheaper/faster model for initial filtering and a more powerful model for detailed analysis. These configurations can also be set via YAML:
+```yaml
+vars:
+  openai_base: &openai_base "https://api.openai.com/v1"
+  openai_key: &openai_key "${OPENAI_API_KEY}"
+  deepinfra_base: &deepinfra_base "https://api.deepinfra.com/v1/openai"
+  deepinfra_key: &deepinfra_key "${DEEPINFRA_API_KEY}"
+
+steps:
+  - sculptor:
+      model: "meta-llama/Llama-2-7b"
+      api_key: *deepinfra_key
+      base_url: *deepinfra_base
+      # ... other config ...
+
+  - sculptor:
+      model: "gpt-4"
+      api_key: *openai_key
+      base_url: *openai_base
+      # ... other config ...
 ```
 
 ## Pipeline Usage Example

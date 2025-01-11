@@ -55,5 +55,5 @@ where = ["src"]
 
 [project.urls]
 Homepage = "https://lightningrod.ai"
-Source = "https://github.com/bturtel/sculptor"
-Repository = "https://github.com/bturtel/sculptor.git"
+Source = "https://github.com/lightning-rod-labs/sculptor"
+Repository = "https://github.com/lightning-rod-labs/sculptor.git"
