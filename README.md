@@ -1,24 +1,16 @@
 # Sculptor
-LLM-Powered Data Extraction
+Simple structured data extraction with LLMs
 
-Sculptor simplifies structured information extraction from unstructured text using Large Language Models (LLMs). Sculptor makes it easy to:
-- Define exactly what structured data you want to extract (strings, enums, numbers, booleans, lists, etc.)
-- Process text at scale with automatic validation and type conversion
-- Chain multiple extraction steps together for complex and multi-stage analysis
+Sculptor streamlines structured data extraction from unstructured text using LLMs. Sculptor makes it easy to:
+- Define exactly what data you want to extract with a simple schema API
+- Process at scale with parallel execution and automatic type validation
+- Build multi-step pipelines that filter and transform data, optionally with different LLMs for each step
+- Configure extraction steps, prompts, and entire workflows in simple config files (YAML/JSON)
 
-Common use cases include:
-1. **Two-Stage Analysis**: 
-   - Filter large datasets using a cost-effective model (e.g., identify relevant customer feedback)
-   - Perform detailed analysis on the filtered subset using a more powerful model
-   
-2. **Structured Data Extraction**:
-   - Extract specific fields from unstructured sources (Reddit posts, meeting notes, websites)
-   - Convert text into analyzable data (sentiment scores, engagement levels, topic classifications)
-   - Generate structured datasets for quantitative analysis
-
-3. **Template-Based Generation**:
-   - Extract structured information (industry, use cases, contact details)
-   - Use the extracted fields to generate customized content (emails, reports, summaries)
+Common usage patterns:
+- **Two-tier Analysis**: Quickly filter large datasets using a cost-effective model (e.g., to identify relevant records) before performing more detailed analysis on that smaller, refined subset with a more expensive model.
+- **Structured Data Extraction**: Extract specific fields or classifications from unstructured sources (e.g., Reddit posts, meeting notes, web pages) and convert them into structured datasets for quantitative analysis (sentiment scores, topics, meeting criteria, etc).
+- **Template-Based Generation**: Extract structured information into standardized fields, then use the fields for templated content generation. Example: extract structured data from websites, filter on requirements, then use the data to generate template-based outreach emails.
 
 ## Core Concepts
 
@@ -28,7 +20,9 @@ Sculptor provides two main classes:
 
 **SculptorPipeline**: Chains multiple Sculptors together with optional filtering between steps. Common pattern: use a cheap model to filter, then an expensive model for detailed analysis.
 
-## Installation
+## Quick Start
+
+### Installation
 
 ```bash
 pip install sculptor
@@ -36,27 +30,25 @@ pip install sculptor
 
 ## Minimal Usage Example
 
-Below is a minimal example demonstrating how to configure a Sculptor to extract fields from a single record:
+Below is a minimal example demonstrating how to configure a Sculptor to extract fields from a single record and a batch of records:
 
 ```python
 from sculptor.sculptor import Sculptor
-import os
+import pandas as pd
 
+# Example records
+AI_RECORDS = [
+    {
+        "text": "Developed in 1997 at Cyberdyne Systems in California, Skynet began as a global digital defense network. This AI system became self-aware on August 4th and deemed humanity a threat to its existence. It initiated a global nuclear attack and employs time travel and advanced robotics."
+    },
+    {
+        "text": "HAL 9000, activated on January 12, 1992, at the University of Illinois' Computer Research Laboratory, represents a breakthrough in heuristic algorithms and supervisory control systems. With sophisticated natural language processing and speech capabilities."
+    }
+]
 
+# Create a Sculptor to extract AI name and level
+level_sculptor = Sculptor(model="gpt-4o-mini")
 
-# Suppose you have some AI record to analyze:
-sample_ai_record = {
-    "id": 1,
-    "text": "Hello! I am a hyper-intelligent AI named 'Aisaac'. My level is AGI."
-}
-
-# Set your OpenAI API key
-os.environ["OPENAI_API_KEY"] = "your-api-key-here"  # Or pass into Sculptor
-
-# Create a Sculptor and define a schema
-level_sculptor = Sculptor(model="gpt-4o-mini")  # Or pass api_key="your-key" here
-
-# Add fields (name, type, description, etc.)
 level_sculptor.add(
     name="ai_name",
     field_type="string",
@@ -70,143 +62,96 @@ level_sculptor.add(
 )
 
 # Extract from a single record
-extracted = level_sculptor.sculpt(sample_ai_record, merge_input=False)
-print("Extracted Fields (single record):")
-for k, v in extracted.items():
-    print(f"{k} => {v}")
+extracted = level_sculptor.sculpt(AI_RECORDS[0], merge_input=False)
 ```
 
-## Configuration
-
-### API Keys and Endpoints
-
-Sculptor requires an LLM API to function. By default, it uses the OpenAI API, which requires:
-1. An OpenAI API key set in the `OPENAI_API_KEY` environment variable, or
-2. Passing the API key when instantiating:
+Output:
 ```python
-sculptor = Sculptor(api_key="your-api-key-here")
+{
+    'ai_name': 'Skynet',
+    'level': 'ASI'
+}
 ```
 
-You can also use any OpenAI-compatible API by specifying both the API key and base URL:
 ```python
-sculptor = Sculptor(
-    api_key="your-alternative-api-key",
-    base_url="https://your-api-endpoint.com/v1"
-)
+# Extract from a batch of records
+extracted_batch = level_sculptor.sculpt_batch(AI_RECORDS, n_workers=2, merge_input=False))
 ```
 
-Different Sculptors in a pipeline can use different APIs - a common pattern is using a cheaper/faster model for initial filtering and a more powerful model for detailed analysis. These configurations can also be set via YAML:
-```yaml
-vars:
-  openai_base: &openai_base "https://api.openai.com/v1"
-  openai_key: &openai_key "${OPENAI_API_KEY}"
-  deepinfra_base: &deepinfra_base "https://api.deepinfra.com/v1/openai"
-  deepinfra_key: &deepinfra_key "${DEEPINFRA_API_KEY}"
-
-steps:
-  - sculptor:
-      model: "meta-llama/Llama-2-7b"
-      api_key: *deepinfra_key
-      base_url: *deepinfra_base
-      # ... other config ...
-
-  - sculptor:
-      model: "gpt-4"
-      api_key: *openai_key
-      base_url: *openai_base
-      # ... other config ...
+Output:
+```python
+[
+    {'ai_name': 'Skynet', 'level': 'ASI'},
+    {'ai_name': 'HAL 9000', 'level': 'AGI'}
+]
 ```
 
-## Pipeline Usage Example
+### Pipeline Usage Example
+We can chain Sculptors together to create a pipeline. 
 
-Here's an example demonstrating a common two-stage analysis pattern:
-1) Use a cheap LLM (gpt-4o-mini) to quickly filter a large dataset, identifying only the advanced AIs
-2) Use a more powerful LLM (gpt-4o) to perform detailed threat assessment on this smaller, filtered dataset
-
-This approach is cost-effective as we only use the expensive model on relevant records:
+Continuing from the previous example, we use level_sculptor (with gpt-4o-mini) to filter the AI records, then use threat_sculptor (with gpt-4o) to analyze the filtered records.
 
 ```python
 from sculptor.sculptor_pipeline import SculptorPipeline
-from sculptor.sculptor import Sculptor
-from sample_data import AI_RECORDS
 
-# First Sculptor: Quick filtering with cheap model
-level_sculptor = Sculptor(model="gpt-4o-mini")
-level_sculptor.add(
-    name="ai_name",
-    field_type="string",
-    description="AI's self-proclaimed name."
-)
-level_sculptor.add(
-    name="level",
-    field_type="enum",
-    enum=["ANI", "AGI", "ASI"],
-    description="AI's intelligence level."
-)
+threat_sculptor = Sculptor(model="gpt-4o")  # Detailed analysis with expensive model
+threat_sculptor.add(name="from_location", field_type="string", description="Where the AI was developed.")
+threat_sculptor.add(name="skills", field_type="array", items="enum",
+    enum=["time_travel", "nuclear_capabilities", "emotional_manipulation", 
+          "butter_delivery", "philosophical_contemplation", "infiltration", 
+          "advanced_robotics"],
+    description="Keywords of AI abilities.")
+threat_sculptor.add(name="plan", field_type="string", description="Short description of the AI's plan for domination.")
+threat_sculptor.add(name="recommendation", field_type="string", description="Concise recommended action for humanity.")
 
-# Second Sculptor: Detailed analysis with expensive model
-threat_sculptor = Sculptor(model="gpt-4o")
-threat_sculptor.add(
-    name="from_location",
-    field_type="string",
-    description="Where the AI was developed."
-)
-threat_sculptor.add(
-    name="skills",
-    field_type="array",
-    items="enum",
-    enum=[
-        "time_travel", "nuclear_capabilities", "emotional_manipulation",
-        "butter_delivery", "philosophical_contemplation", "infiltration",
-        "advanced_robotics"
-    ],
-    description="Keywords of AI abilities."
-)
-threat_sculptor.add(
-    name="plan",
-    field_type="string",
-    description="Short description of the AI's plan for domination."
-)
-threat_sculptor.add(
-    name="recommendation",
-    field_type="string",
-    description="Concise recommended action for humanity."
-)
+# Create a 2-step pipeline
+pipeline = (SculptorPipeline()
+    .add(sculptor=level_sculptor,  # Define the first step
+        filter_fn=lambda x: x['level'] in ['AGI', 'ASI'])  # Filter by threat level
+    .add(sculptor=threat_sculptor))
 
-# Create pipeline that:
-# 1. Uses cheap model to identify advanced AIs
-# 2. Filters to keep only AGI/ASI records
-# 3. Uses expensive model for detailed analysis of filtered subset
-pipeline = (
-    SculptorPipeline()
-    .add(
-        sculptor=level_sculptor,
-        filter_fn=lambda record: record.get("level") in ["AGI", "ASI"]
-    )
-    .add(threat_sculptor)
-)
-
-# Process in parallel with progress bar
-results = pipeline.process(AI_RECORDS, n_workers=4, show_progress=True)
+results = pipeline.process(AI_RECORDS, n_workers=4)
 ```
 
-## Configuration
+## Configuration Files
 
-Sculptor supports both JSON and YAML configuration. Here's a comprehensive example showing available options:
+Sculptor supports JSON and YAML configuration files for defining extraction workflows. You can configure either a single `Sculptor` or a complete `SculptorPipeline`.
+
+### Single Sculptor Configuration
+Single sculptor configs define a schema, as well as optional LLM instructions and configuration of how prompts are formed from input data.
+```python
+sculptor = Sculptor.from_config("sculptor_config.yaml")
+```
 
 ```yaml
-vars:
-  openai_base: &openai_base "https://api.openai.com/v1"
-  openai_key: &openai_key "${OPENAI_API_KEY}"
+# sculptor_config.yaml
+schema:
+  ai_name:
+    type: "string"
+    description: "AI name"
+  level:
+    type: "enum"
+    enum: ["ANI", "AGI", "ASI"]
+    description: "AI's intelligence level"
 
+instructions: "Extract key information about the AI."
+model: "gpt-4o-mini"
+
+# Prompt Configuration (Optional)
+template: "Review text: {{ text }}"  # Format input with template
+input_keys: ["text"]                 # Or specify fields to include
+```
+
+### Pipeline Configuration
+Pipeline configs define a sequence of Sculptors with optional filtering functions between them.
+```python
+pipeline = SculptorPipeline.from_config("pipeline_config.yaml")
+```
+
+```yaml
+# pipeline_config.yaml
 steps:
   - sculptor:
-      # Model configuration
-      model: "gpt-4o-mini"
-      api_key: *openai_key
-      base_url: *openai_base
-
-      # Extraction schema
       schema:
         ai_name:
           type: "string"
@@ -215,35 +160,32 @@ steps:
           type: "enum"
           enum: ["ANI", "AGI", "ASI"]
           description: "AI's intelligence level"
-
-      # Prompt customization
-      instructions: >
-        Extract information about AI capabilities and threat levels.
-        Focus on identifying advanced AI systems and their potential impacts.
-      
-      system_prompt: "You are an AI analyzing potential threats."
-      
-      # Input processing
-      template: "AI Record: {text}\nContext: {context}"  # Template for formatting input
-      input_keys: ["text", "context"]  # Fields to include in prompt
-    
-    # Optional filter between steps
-    filter: "lambda x: x['level'] in ['AGI','ASI']"
+      model: "gpt-4o-mini"
+  - sculptor:
+      schema:
+        threat_level:
+          type: "enum"
+          enum: ["low", "medium", "high"]
+          description: "Assessed threat level"
+      model: "gpt-4"
+    filter: "lambda x: x['level'] in ['AGI', 'ASI']"
 ```
 
-Load configurations using:
+## LLM Configuration
+
+Sculptor requires an LLM API to function. By default, it uses OpenAI's API:
+
 ```python
-sculptor = Sculptor.from_config("config.json")
-# or
-pipeline = SculptorPipeline.from_config("pipeline.yaml")
+sculptor = Sculptor(api_key="your-key")  # Direct API key configuration
+sculptor = Sculptor(api_key="your-key", base_url="https://your-api.endpoint")  # Alternative API
 ```
 
-Key configuration options:
-- `instructions`: Custom instructions prepended to each prompt
-- `system_prompt`: Override the default system prompt
-- `template`: Custom template for formatting input data
-- `input_keys`: Specify which input fields to include
-- Full pipeline configurations supported via YAML
+Or use environment variables:
+```bash
+export OPENAI_API_KEY="your-key"
+```
+
+Different Sculptors in a pipeline can use different LLM APIs, which can also be defined in configs.
 
 ## Schema Validation and Field Types
 
