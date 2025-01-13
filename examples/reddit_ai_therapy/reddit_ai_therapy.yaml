@@ -3,9 +3,6 @@ vars:
   openai_key: &openai_key "${OPENAI_API_KEY}"
   deepinfra_base: &deepinfra_base "https://api.deepinfra.com/v1/openai"
   deepinfra_key: &deepinfra_key "${DEEPINFRA_API_KEY}"
-  reddit_client_id: &reddit_client_id "${REDDIT_CLIENT_ID}"
-  reddit_client_secret: &reddit_client_secret "${REDDIT_CLIENT_SECRET}"
-  reddit_user_agent: &reddit_user_agent "${REDDIT_USER_AGENT}"
 
 steps:
   - sculptor:
@@ -44,9 +41,9 @@ steps:
 
 
   - sculptor:
-      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-      api_key: *deepinfra_key
-      base_url: *deepinfra_base
+      model: "gpt-4o-mini"
+      api_key: *openai_key
+      base_url: *openai_base
       schema:
         sentiment:
           type: integer
