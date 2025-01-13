@@ -12,6 +12,8 @@ Common usage patterns:
 - **Structured Data Extraction**: Extract specific fields or classifications from unstructured sources (e.g., Reddit posts, meeting notes, web pages) and convert them into structured datasets for quantitative analysis (sentiment scores, topics, meeting criteria, etc).
 - **Template-Based Generation**: Extract structured information into standardized fields, then use the fields for templated content generation. Example: extract structured data from websites, filter on requirements, then use the data to generate template-based outreach emails.
 
+Some examples can be found in the [examples/examples.ipynb](examples/examples.ipynb) notebook.
+
 ## Core Concepts
 
 Sculptor provides two main classes:
@@ -112,6 +114,7 @@ pipeline = (SculptorPipeline()
 
 results = pipeline.process(AI_RECORDS, n_workers=4)
 ```
+More examples can be found in the [examples/examples.ipynb](examples/examples.ipynb) notebook.
 
 ## Configuration Files
 
