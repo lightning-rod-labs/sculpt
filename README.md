@@ -30,6 +30,11 @@ Sculptor provides two main classes:
 pip install sculptor
 ```
 
+Set your OpenAI API key as an environment variable:
+```bash
+export OPENAI_API_KEY="your-key"
+```
+
 ## Minimal Usage Example
 
 Below is a minimal example demonstrating how to configure a Sculptor to extract fields from a single record and a batch of records:
@@ -62,26 +67,23 @@ level_sculptor.add(
     enum=["ANI", "AGI", "ASI"],
     description="AI's intelligence level (ANI=narrow, AGI=general, ASI=super)."
 )
-
-# Extract from a single record
+```
+We can use it to extract from a single record:
+```python
 extracted = level_sculptor.sculpt(AI_RECORDS[0], merge_input=False)
 ```
-
-Output:
-```python
+```json
 {
     'ai_name': 'Skynet',
     'level': 'ASI'
 }
 ```
+Or, we can use it for parallelized extraction from a batch of records:
 
 ```python
-# Extract from a batch of records
-extracted_batch = level_sculptor.sculpt_batch(AI_RECORDS, n_workers=2, merge_input=False))
+extracted_batch = level_sculptor.sculpt_batch(AI_RECORDS, n_workers=2, merge_input=False)
 ```
-
-Output:
-```python
+```json
 [
     {'ai_name': 'Skynet', 'level': 'ASI'},
     {'ai_name': 'HAL 9000', 'level': 'AGI'}
@@ -96,7 +98,8 @@ Continuing from the previous example, we use level_sculptor (with gpt-4o-mini) t
 ```python
 from sculptor.sculptor_pipeline import SculptorPipeline
 
-threat_sculptor = Sculptor(model="gpt-4o")  # Detailed analysis with expensive model
+# Detailed analysis with expensive model
+threat_sculptor = Sculptor(model="gpt-4o")
 threat_sculptor.add(name="from_location", field_type="string", description="Where the AI was developed.")
 threat_sculptor.add(name="skills", field_type="array", items="enum",
     enum=["time_travel", "nuclear_capabilities", "emotional_manipulation", 
@@ -108,17 +111,20 @@ threat_sculptor.add(name="recommendation", field_type="string", description="Con
 
 # Create a 2-step pipeline
 pipeline = (SculptorPipeline()
-    .add(sculptor=level_sculptor,  # Define the first step
+    .add(sculptor=level_sculptor,  # Defined the first step
         filter_fn=lambda x: x['level'] in ['AGI', 'ASI'])  # Filter by threat level
-    .add(sculptor=threat_sculptor))
+    .add(sculptor=threat_sculptor))  # Analyze
 
+# Run it
 results = pipeline.process(AI_RECORDS, n_workers=4)
 ```
 More examples can be found in the [examples/examples.ipynb](examples/examples.ipynb) notebook.
 
 ## Configuration Files
 
-Sculptor supports JSON and YAML configuration files for defining extraction workflows. You can configure either a single `Sculptor` or a complete `SculptorPipeline`.
+Sculptor allows you to define your extraction workflows in JSON or YAML configuration files. This keeps your schemas and prompts separate from your code, making them easier to manage and reuse.
+
+Configs can define a single `Sculptor` or a complete `SculptorPipeline`.
 
 ### Single Sculptor Configuration
 Single sculptor configs define a schema, as well as optional LLM instructions and configuration of how prompts are formed from input data.
@@ -176,7 +182,9 @@ steps:
 
 ## LLM Configuration
 
-Sculptor requires an LLM API to function. By default, it uses OpenAI's API:
+Sculptor requires an LLM API to function. By default, it uses OpenAI's API.  Different Sculptors in a pipeline can use different LLM APIs..
+
+You can configure LLMs when creating a Sculptor:
 
 ```python
 sculptor = Sculptor(api_key="your-key")  # Direct API key configuration
@@ -188,7 +196,13 @@ Or use environment variables:
 export OPENAI_API_KEY="your-key"
 ```
 
-Different Sculptors in a pipeline can use different LLM APIs, which can also be defined in configs.
+You can configure LLMs in configs (preferably using environment variables for keys):
+
+```yaml
+api_key: "${YOUR_API_KEY}"
+base_url: "https://your-api.endpoint"
+model: "your-ai-model"
+```
 
 ## Schema Validation and Field Types
 
