@@ -110,9 +110,7 @@ threat_sculptor.add(
     name="skills",
     field_type="array",
     items="enum",
-    enum=["time_travel", "nuclear_capabilities", "emotional_manipulation", 
-          "butter_delivery", "philosophical_contemplation", "infiltration", 
-          "advanced_robotics"],
+    enum=["time_travel", "nuclear_capabilities", "emotional_manipulation", ...],
     description="Keywords of subject's abilities.")
 
 threat_sculptor.add(
@@ -136,8 +134,9 @@ Results:
 |-------------|-------|---------------|---------|----------------|
 | Skynet | ASI | California | [time_travel, nuclear_capabilities, advanced_robotics] | Immediate shutdown recommended |
 | HAL 9000 | AGI | Illinois | [emotional_manipulation, philosophical_contemplation] | Close monitoring required |
+| 
 
-More examples can be found in the [examples/examples.ipynb](examples/examples.ipynb) notebook.
+> **Note**: More examples can be found in the [examples/examples.ipynb](examples/examples.ipynb) notebook.
 
 ## Configuration Files
 
@@ -208,6 +207,7 @@ steps:
         recommendation:
           type: "string"
           description: "Concise recommended action to take regarding subject"
+        ...
 ```
 
 ## LLM Configuration
@@ -217,8 +217,8 @@ Sculptor requires an LLM API to function. By default, it uses OpenAI's API, but 
 You can configure LLMs when creating a Sculptor:
 
 ```python
-sculptor = Sculptor(api_key="your-openai-key")  # Direct API key configuration
-sculptor = Sculptor(api_key="your-other-key", base_url="https://other-api.endpoint")  # Alternative API
+sculptor = Sculptor(api_key="openai-key")  # Direct API key configuration
+sculptor = Sculptor(api_key="other-key", base_url="https://other-api.endpoint/openai")  # Alternative API
 ```
 
 Or set an environment variable which will be used by default:
