@@ -1,0 +1,131 @@
+vars:
+  openai_base: &openai_base "https://api.openai.com/v1"
+  openai_key: &openai_key "${OPENAI_API_KEY}"
+  deepinfra_base: &deepinfra_base "https://api.deepinfra.com/v1/openai"
+  deepinfra_key: &deepinfra_key "${DEEPINFRA_API_KEY}"
+  reddit_client_id: &reddit_client_id "${REDDIT_CLIENT_ID}"
+  reddit_client_secret: &reddit_client_secret "${REDDIT_CLIENT_SECRET}"
+  reddit_user_agent: &reddit_user_agent "${REDDIT_USER_AGENT}"
+
+steps:
+  - sculptor:
+      model: "microsoft/phi-4"
+      api_key: *deepinfra_key
+      base_url: *deepinfra_base
+      schema:
+        relevant_sample:
+          type: boolean
+          description: "Boolean indicating if text describes personal experience using AI for the use case described in the prompt"
+        relevant_sample_explanation:
+          type: string
+          description: "Explanation of why the sample was classified as relevant or not relevant"
+      instructions: >
+        We are analyzing Reddit posts to understand how people are using AI and chatbots for mental health, coaching, or emotional support.
+        Specifically, we want to identify posts where users share their personal experiences using AI tools for:
+          - Managing mental health conditions (anxiety, depression, ADHD, OCD, PTSD, trauma, etc.)
+          - Emotional support and wellbeing
+          - Therapy supplements or alternatives
+          - Wellness coaching and goal setting
+          - Help focusing, managing stress, or overcoming obstacles
+          - Other similar use cases involving AI in mental health
+
+        The post should include first-hand experience using AI tools, not just general discussion about AI in mental health.
+        This does NOT need to be the main focus of the post, but it should clearly mention using AI for the use case described.
+
+        You have a main TEXT and possibly a CONTEXT. Focus ONLY on the TEXT when deciding relevance.
+
+        If the post includes a clear, first-hand experience of using AI or chatbots for mental health, support, coaching, or similar, set relevant_sample to True. Otherwise, set it to False.
+
+        Provide a short explanation in relevant_sample_explanation describing your reasoning, especially whether or not the user explicitly describes a personal experience.
+      system_prompt: >
+        You are an AI filtering Reddit posts to determine whether they share genuine, first-hand experiences of using AI for mental health, coaching, or emotional support. Respond in valid JSON, setting relevant_sample to True or False, and give a concise relevant_sample_explanation.
+    filter: "lambda x: x['relevant_sample'] == True"
+    template: "Reddit Post: {text} \n\n Context: {context}"
+
+
+  - sculptor:
+      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+      api_key: *deepinfra_key
+      base_url: *deepinfra_base
+      schema:
+        sentiment:
+          type: integer
+          description: "Integer 1-10 indicating sentiment TOWARDS using AI for mental health (10 most positive). This is NOT sentiment of the post overall, just sentiment towards the interaction with AI."
+        benefits:
+          type: array
+          items: enum
+          enum: ["non_judgemental", "on_demand", "affordable", "accessible", "anonymous", 
+                 "consistent", "supportive", "patient", "convenient", "personalized",
+                 "available_24_7", "no_waitlist", "private", "self_paced", "educational",
+                 "low_pressure", "instant_feedback", "goal_oriented", "data_driven", "other"]
+          description: "List of keywords relating to perceived benefits of using the AI (select multiple if relevant), e.g.: non_judgemental, on_demand, affordable, accessible, anonymous, consistent, supportive, patient"
+        downsides:
+          type: array
+          items: enum
+          enum: ["repetitive", "robotic", "shallow", "unreliable", "addictive", 
+                 "avoidant", "limited", "expensive", "technical_issues", "privacy_concerns",
+                 "lack_human_touch", "misunderstandings", "hallucinations", "dependency_risk",
+                 "not_professional", "generic_advice", "ethical_concerns", "safety_risks", 
+                 "no_accountability", "other"]
+          description: "List of keywords relating to downsides of using the AI (select multiple if relevant), e.g.: repetitive, robotic, shallow, unreliable, addictive, avoidant, limited"
+        use_cases:
+          type: array
+          items: enum
+          enum: ["reflection", "venting", "self_talk", "planning", "CBT", "journaling",
+                 "motivation", "reminders", "emotional_support", "crisis_support",
+                 "skill_building", "habit_tracking", "meditation", "exposure_therapy",
+                 "goal_setting", "accountability", "problem_solving", "stress_management",
+                 "sleep_support", "other"]
+          description: "List of keywords relating to how AI is used (select multiple if relevant), e.g.: reflection, venting, self_talk, planning, CBT, journaling, motivation, reminders, emotional_support"
+        conditions:
+          type: array
+          items: enum
+          enum: ["ADHD", "depression", "anxiety", "addiction", "OCD", "PTSD", 
+                 "bipolar", "eating_disorder", "autism", "BPD", "social_anxiety",
+                 "panic_disorder", "insomnia", "trauma", "stress", "burnout",
+                 "grief", "relationship_issues", "self_esteem", "other"]
+          description: "List of keywords describing conditions being addressed (select multiple if relevant), e.g.: ADHD, depression, anxiety, addiction, OCD, PTSD, bipolar, eating_disorder"
+        seeing_provider:
+          type: boolean
+          description: "Boolean indicating if subject indicates they are CURRENTLY seeing a therapist or mental health provider"
+        previous_provider:
+          type: boolean
+          description: "Boolean indicating if subject indicates they have EVER seen a therapist or mental health provider"
+        provider_problems:
+          type: array
+          items: enum
+          enum: ["expensive", "unavailable", "inaccessible", "scheduling", "inconsistent",
+                 "judgmental", "long_waitlists", "insurance_issues", "bad_fit", "burnout",
+                 "location", "transportation", "quality", "cultural_barriers", "stigma",
+                 "lack_expertise", "cancelled_sessions", "limited_hours", "paperwork", "other"]
+          description: "List of keywords relating to perceived issues with HUMAN PROVIDERS (select multiple if relevant), e.g.: expensive, unavailable, inaccessible, scheduling, inconsistent, judgmental"
+        fields_explanation:
+          type: string
+          description: "Concise but thorough explanation of your reasoning for each field in the schema (except for relevant_sample and relevant_sample_explanation)"
+      instructions: >
+        We are analyzing Reddit posts to understand how people are using AI and chatbots for mental health, coaching, or emotional support.
+        Specifically, we want to identify posts where users share their personal experiences using AI tools for:
+        - Managing mental health conditions (anxiety, depression, ADHD, OCD, PTSD, trauma, etc.)
+        - Emotional support and wellbeing
+        - Therapy supplements or alternatives
+        - Wellness coaching and goal setting
+        - Help focusing, goal setting, managing stress, overcoming obstacles, etc.
+        - Other similar use cases for AI in mental health
+
+        The post should include first-hand experience using AI tools, not just general discussion about AI in mental health.
+        This does NOT need to be the main focus of the post, but it should clearly mention using AI for the use case described.
+        We want to extract structured data about their experiences, including benefits, challenges, and specific use cases.
+        Do NOT make stuff up. ONLY use keywords that accurately fit what the schema describes.
+        A keyword that applies to the post generally but not specifically to what is asked for by the schema should not be used.
+
+        From the TEXT (and optional CONTEXT), extract:
+          - overall sentiment (scale 1-10),
+          - benefits and downsides,
+          - specific use cases (venting, journaling, CBT, etc.),
+          - any mentioned conditions (ADHD, anxiety, etc.),
+          - provider status (currently seeing one, or has previously),
+          - issues with human providers.
+
+        Return valid JSON conforming to the schema. Do NOT invent details beyond what the TEXT states explicitly.
+      system_prompt: >
+        You are an AI analyzing posts to extract structured information about firsthand AI mental health usage. Follow the schema exactly, returning only valid JSON with the fields specified, avoiding any unsupported fields or speculation.

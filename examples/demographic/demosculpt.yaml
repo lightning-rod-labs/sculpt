@@ -1,0 +1,29 @@
+model: gpt-4o-mini
+instructions: "Extract the following information about the person in the text:"
+template: "Demographic Information: {text}"
+schema:
+  name:
+    type: string
+    description: "The person's name"
+  age:
+    type: integer
+    description: "The person's age"
+  city:
+    type: string
+    description: "The city the person lives in"
+  occupation:
+    type: string
+    description: "The person's occupation"
+  interests:
+    type: array
+    description: "A list of the person's interests"
+    items: string
+  is_married:
+    type: boolean
+    description: "Whether the person is married"
+  num_children:
+    type: integer
+    description: "How many children does this person have"
+  net_worth:
+    type: number
+    description: "Estimated net worth of this person"
