@@ -201,10 +201,6 @@ Sculptor supports the following types in the schema's "type" field:
 
 These map to Python's str, float, bool, int, list, dict, etc. The "enum" type must provide a list of valid values.
 
-## Batch Processing & Parallelism
-
-The sculpt_batch() method (used internally by process()) can perform parallel extraction with n_workers > 1. This can speed up large datasets.
-
 ## License
 
 MIT

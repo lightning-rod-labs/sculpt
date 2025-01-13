@@ -150,7 +150,10 @@ class Sculptor:
             field_type = meta["type"]
 
             if isinstance(field_type, type):
-                field_type = [k for k, v in ALLOWED_TYPES.items() if v == field_type][0]
+                if field_type == list:
+                    field_type = "array"  # Ensure list type is treated as "array"
+                else:
+                    field_type = [k for k, v in ALLOWED_TYPES.items() if v == field_type][0]
 
             # Add null type for numeric fields to avoid defaulting to 0
             needs_null = field_type in ["number", "integer"]
@@ -159,6 +162,8 @@ class Sculptor:
                 item_type = meta["items"]
                 if isinstance(item_type, type):
                     item_type = [k for k, v in ALLOWED_TYPES.items() if v == item_type][0]
+                elif isinstance(item_type, str):
+                    item_type = item_type.lower()  # Convert string type to lowercase
 
                 if item_type == "enum":
                     properties[field_name] = {
