@@ -44,7 +44,7 @@ from sculptor.sculptor import Sculptor
 import pandas as pd
 
 # Example records
-AI_RECORDS = [
+INPUT_RECORDS = [
     {
         "text": "Developed in 1997 at Cyberdyne Systems in California, Skynet began as a global digital defense network. This AI system became self-aware on August 4th and deemed humanity a threat to its existence. It initiated a global nuclear attack and employs time travel and advanced robotics."
     },
@@ -57,36 +57,36 @@ AI_RECORDS = [
 level_sculptor = Sculptor(model="gpt-4o-mini")
 
 level_sculptor.add(
-    name="ai_name",
+    name="subject_name",
     field_type="string",
-    description="AI's self-proclaimed name."
+    description="Name of subject."
 )
 level_sculptor.add(
     name="level",
     field_type="enum",
     enum=["ANI", "AGI", "ASI"],
-    description="AI's intelligence level (ANI=narrow, AGI=general, ASI=super)."
+    description="Subject's intelligence level (ANI=narrow, AGI=general, ASI=super)."
 )
 ```
 We can use it to extract from a single record:
 ```python
-extracted = level_sculptor.sculpt(AI_RECORDS[0], merge_input=False)
+extracted = level_sculptor.sculpt(INPUT_RECORDS[0], merge_input=False)
 ```
 ```json
 {
-    'ai_name': 'Skynet',
+    'subject_name': 'Skynet',
     'level': 'ASI'
 }
 ```
 Or, we can use it for parallelized extraction from a batch of records:
 
 ```python
-extracted_batch = level_sculptor.sculpt_batch(AI_RECORDS, n_workers=2, merge_input=False)
+extracted_batch = level_sculptor.sculpt_batch(INPUT_RECORDS, n_workers=2, merge_input=False)
 ```
 ```json
 [
-    {'ai_name': 'Skynet', 'level': 'ASI'},
-    {'ai_name': 'HAL 9000', 'level': 'AGI'}
+    {'subject_name': 'Skynet', 'level': 'ASI'},
+    {'subject_name': 'HAL 9000', 'level': 'AGI'}
 ]
 ```
 
@@ -100,24 +100,43 @@ from sculptor.sculptor_pipeline import SculptorPipeline
 
 # Detailed analysis with expensive model
 threat_sculptor = Sculptor(model="gpt-4o")
-threat_sculptor.add(name="from_location", field_type="string", description="Where the AI was developed.")
-threat_sculptor.add(name="skills", field_type="array", items="enum",
+
+threat_sculptor.add(
+    name="from_location",
+    field_type="string",
+    description="Subject's place of origin.")
+
+threat_sculptor.add(
+    name="skills",
+    field_type="array",
+    items="enum",
     enum=["time_travel", "nuclear_capabilities", "emotional_manipulation", 
           "butter_delivery", "philosophical_contemplation", "infiltration", 
           "advanced_robotics"],
-    description="Keywords of AI abilities.")
-threat_sculptor.add(name="plan", field_type="string", description="Short description of the AI's plan for domination.")
-threat_sculptor.add(name="recommendation", field_type="string", description="Concise recommended action for humanity.")
+    description="Keywords of subject's abilities.")
+
+threat_sculptor.add(
+    name="recommendation",
+    field_type="string",
+    description="Concise recommended action to take regarding subject.")
 
 # Create a 2-step pipeline
 pipeline = (SculptorPipeline()
     .add(sculptor=level_sculptor,  # Defined the first step
-        filter_fn=lambda x: x['level'] in ['AGI', 'ASI'])  # Filter by threat level
+        filter_fn=lambda x: x['level'] in ['AGI', 'ASI'])  # Filter on level
     .add(sculptor=threat_sculptor))  # Analyze
 
 # Run it
-results = pipeline.process(AI_RECORDS, n_workers=4)
+results = pipeline.process(INPUT_RECORDS, n_workers=4)
+pd.DataFrame(results)
 ```
+
+Results:
+| subject_name | level | from_location | skills | recommendation |
+|-------------|-------|---------------|---------|----------------|
+| Skynet | ASI | California | [time_travel, nuclear_capabilities, advanced_robotics] | Immediate shutdown recommended |
+| HAL 9000 | AGI | Illinois | [emotional_manipulation, philosophical_contemplation] | Close monitoring required |
+
 More examples can be found in the [examples/examples.ipynb](examples/examples.ipynb) notebook.
 
 ## Configuration Files
@@ -129,21 +148,23 @@ Configs can define a single `Sculptor` or a complete `SculptorPipeline`.
 ### Single Sculptor Configuration
 Single sculptor configs define a schema, as well as optional LLM instructions and configuration of how prompts are formed from input data.
 ```python
-sculptor = Sculptor.from_config("sculptor_config.yaml")
+sculptor = Sculptor.from_config("sculptor_config.yaml")  # Read
+extracted = sculptor.sculpt_batch(INPUT_RECORDS)  # Run
+
 ```
 
 ```yaml
 # sculptor_config.yaml
 schema:
-  ai_name:
+  subject_name:
     type: "string"
-    description: "AI name"
+    description: "Name of subject"
   level:
     type: "enum"
     enum: ["ANI", "AGI", "ASI"]
-    description: "AI's intelligence level"
+    description: "Subject's intelligence level"
 
-instructions: "Extract key information about the AI."
+instructions: "Extract key information about the subject."
 model: "gpt-4o-mini"
 
 # Prompt Configuration (Optional)
@@ -154,54 +175,67 @@ input_keys: ["text"]                 # Or specify fields to include
 ### Pipeline Configuration
 Pipeline configs define a sequence of Sculptors with optional filtering functions between them.
 ```python
-pipeline = SculptorPipeline.from_config("pipeline_config.yaml")
+pipeline = SculptorPipeline.from_config("pipeline_config.yaml")  # Read
+results = pipeline.process(INPUT_RECORDS, n_workers=4)  # Run
 ```
 
 ```yaml
 # pipeline_config.yaml
 steps:
   - sculptor:
+      model: "gpt-4o-mini"
       schema:
-        ai_name:
+        subject_name:
           type: "string"
-          description: "AI name"
+          description: "Name of subject"
         level:
           type: "enum"
           enum: ["ANI", "AGI", "ASI"]
-          description: "AI's intelligence level"
-      model: "gpt-4o-mini"
+          description: "Subject's intelligence level"
+      filter: "lambda x: x['level'] in ['AGI', 'ASI']"
+
   - sculptor:
       schema:
-        threat_level:
-          type: "enum"
-          enum: ["low", "medium", "high"]
-          description: "Assessed threat level"
-      model: "gpt-4"
-    filter: "lambda x: x['level'] in ['AGI', 'ASI']"
+        model: "gpt-4o"
+        from_location:
+          type: "string"
+          description: "Subject's place of origin"
+        skills:
+          type: "array"
+          items: "enum"
+          enum: ["time_travel", "nuclear_capabilities", ...]
+          description: "Keywords of subject's abilities"
+        recommendation:
+          type: "string"
+          description: "Concise recommended action to take regarding subject"
 ```
 
 ## LLM Configuration
 
-Sculptor requires an LLM API to function. By default, it uses OpenAI's API.  Different Sculptors in a pipeline can use different LLM APIs..
+Sculptor requires an LLM API to function. By default, it uses OpenAI's API, but we can use any OpenAI-compatible API that supports structured outputs.  Different Sculptors in a pipeline can use different LLM APIs.
 
 You can configure LLMs when creating a Sculptor:
 
 ```python
-sculptor = Sculptor(api_key="your-key")  # Direct API key configuration
-sculptor = Sculptor(api_key="your-key", base_url="https://your-api.endpoint")  # Alternative API
+sculptor = Sculptor(api_key="your-openai-key")  # Direct API key configuration
+sculptor = Sculptor(api_key="your-other-key", base_url="https://other-api.endpoint")  # Alternative API
 ```
 
-Or use environment variables:
+Or set an environment variable which will be used by default:
 ```bash
 export OPENAI_API_KEY="your-key"
 ```
 
-You can configure LLMs in configs (preferably using environment variables for keys):
+You can also configure LLMs in the same config files discussed above:
 
 ```yaml
-api_key: "${YOUR_API_KEY}"
-base_url: "https://your-api.com/openai"
-model: "your-ai-model"
+steps:
+  - sculptor:
+      api_key: "${YOUR_API_KEY_VAR}"
+      base_url: "https://your-api.com/openai"
+      model: "your-ai-model"
+      schema:
+        ...
 ```
 
 ## Schema Validation and Field Types
