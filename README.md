@@ -200,13 +200,14 @@ You can configure LLMs in configs (preferably using environment variables for ke
 
 ```yaml
 api_key: "${YOUR_API_KEY}"
-base_url: "https://your-api.endpoint"
+base_url: "https://your-api.com/openai"
 model: "your-ai-model"
 ```
 
 ## Schema Validation and Field Types
 
 Sculptor supports the following types in the schema's "type" field:
+
 • string  
 • number  
 • boolean  
