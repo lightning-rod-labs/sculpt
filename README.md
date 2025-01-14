@@ -18,9 +18,9 @@ Some examples can be found in the [examples/examples.ipynb](examples/examples.ip
 
 Sculptor provides two main classes:
 
-**Sculptor**: Extracts structured data from text using LLMs. Define your schema (via add() or config files), then extract data using sculpt() for single items or sculpt_batch() for parallel processing.
+* **Sculptor**: Extracts structured data from text using LLMs. Define your schema (via add() or config files), then extract data using sculpt() for single items or sculpt_batch() for parallel processing.
 
-**SculptorPipeline**: Chains multiple Sculptors together with optional filtering between steps. Common pattern: use a cheap model to filter, then an expensive model for detailed analysis.
+* **SculptorPipeline**: Chains multiple Sculptors together with optional filtering between steps. Often a cheap model is used to filter, followed by an expensive model for detailed analysis.
 
 ## Quick Start
 
@@ -134,8 +134,7 @@ Results:
 |-------------|-------|---------------|---------|----------------|
 | Skynet | ASI | California | [time_travel, nuclear_capabilities, advanced_robotics] | Immediate shutdown recommended |
 | HAL 9000 | AGI | Illinois | [emotional_manipulation, philosophical_contemplation] | Close monitoring required |
-| 
-
+<br>
 > **Note**: More examples can be found in the [examples/examples.ipynb](examples/examples.ipynb) notebook.
 
 ## Configuration Files
