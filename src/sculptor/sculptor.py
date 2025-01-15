@@ -92,18 +92,20 @@ class Sculptor:
 
         Args:
             name (str): The field name.
-            field_type (Union[str, type]): e.g. "string", "array", or a Python type like str, list, bool, etc.
+            field_type (Union[str, type]): e.g. "string", "boolean", "array", "enum",
+                                           or a Python type like str, bool, list, etc.
             description (str): Write a short description for the field.
-            items: Type or schema definition for array items if field_type is "array".
-            enum: List of valid strings if field_type is "enum".
+            items: Used if field_type="array". Either another type/dict or "enum".
+            enum: A list of valid enumerated values, used if field_type="enum"
+                  or if (field_type="array" and items="enum"), or if you want the
+                  entire array enumerated as a top-level.
         """
 
-        # Step 1) Convert field_type => valid JSON Schema string
         def normalize_type(t: Union[str, type]) -> str:
             if isinstance(t, type):
-                t_lower = t.__name__.lower()  # e.g. str -> 'str'
+                t_lower = t.__name__.lower()
             else:
-                t_lower = t.lower()           # e.g. "STR" -> 'str'
+                t_lower = t.lower()
 
             if t_lower in ("str", "string"):
                 return "string"
@@ -118,33 +120,53 @@ class Sculptor:
             elif t_lower in ("list", "array"):
                 return "array"
             elif t_lower in ("enum", "anyof"):
-                return t_lower  # leave these as-is
+                return t_lower
             else:
                 raise ValueError(
                     f"Unsupported or invalid type '{t_lower}'. "
-                    f"Allowed: string, boolean, integer, number, object, array, enum, anyOf"
+                    "Allowed types: string, boolean, integer, number, object, array, enum, anyOf"
                 )
 
         field_type_str = normalize_type(field_type)
-
-        # Step 2) If this is an array, ensure items are also normalized or stored as dict
         processed_items = None
+
+        # Handle arrays specially
         if field_type_str == "array":
-            if items is None:
-                raise ValueError("For 'array' type, you must provide 'items' in add(...).")
-
-            if isinstance(items, dict):
-                # If items is a dict describing an object or another array, just store it directly
-                processed_items = items
+            # (A) If user wants a top-level enumerated array
+            #     e.g.: add(name="skills", field_type="array", enum=[["a"],["b"]]) => entire array must be one of these
+            if enum and items is None:
+                # We'll just store it; the final schema = {type: "array", enum: [...of arrays...] }
+                pass  # processed_items remains None, so "items" won't appear
             else:
-                # Otherwise, treat items as a type => convert to "string", "integer", etc.
-                processed_items = normalize_type(items)
+                # (B) Normal array approach (or array of enumerated items)
+                if items is None:
+                    raise ValueError("For 'array' type, you must provide 'items' or supply 'enum' for an enumerated array.")
 
-        # Step 3) If enum, ensure we have enum values
+                # If items="enum", that means each array item is enumerated
+                if isinstance(items, str) and items.lower() == "enum":
+                    # e.g. items="enum", enum=["infiltration","time_travel"]
+                    # => each item is type="string" with that enum
+                    if not enum:
+                        raise ValueError(
+                            "For 'array' + items='enum', please provide an `enum` list for the allowed item values."
+                        )
+                    processed_items = {
+                        "type": "string",
+                        "enum": enum,
+                    }
+                    enum = None  # so the parent doesn't claim 'enum' as well
+                elif isinstance(items, dict):
+                    # Possibly a nested object or more complex definition
+                    processed_items = items
+                else:
+                    # items is a str/type => convert to "string", "integer", etc.
+                    processed_items = normalize_type(items)
+
+        # If field_type="enum" but no enum array is provided
         if field_type_str == "enum" and not enum:
             raise ValueError("For 'enum' type, you must provide a list of allowed values via `enum`.")
 
-        # Step 4) Store the field definition in self.schema
+        # Lastly, store the field definition
         self.schema[name] = {
             "type": field_type_str,
             "description": description,
