@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, List, Type, Union
 from .utils import load_config
 import openai
 from string import Template
+import inspect
 
 ALLOWED_TYPES = {
     "string": str,
@@ -88,7 +89,7 @@ class Sculptor:
         name: str,
         field_type: Union[str, Type] = str,
         description: str = "",
-        items: Optional[Union[str, Type]] = None,
+        items: Optional[Union[str, Dict[str, Any]]] = None,
         enum: Optional[List[Any]] = None
     ):
         """
@@ -98,7 +99,7 @@ class Sculptor:
             name (str): The name of the field.
             field_type (Union[str, Type]): The type of the field (default: str).
             description (str): A description of the field (default: "").
-            items (Optional[Union[str, Type]]): The type of items in the array, if field_type is list (default: None).
+            items (Optional[Union[str, Dict[str, Any]]]): The type of items in the array, if field_type is list (default: None).
             enum (Optional[List[Any]]): Allowed values if field_type is "enum" (default: None).
         """
 
@@ -118,11 +119,22 @@ class Sculptor:
                 raise ValueError(
                     "For 'array' type, 'items' must specify the type of items in the array."
                 )
-            if isinstance(items, str) and items not in ALLOWED_TYPES:
-                raise ValueError(
-                    f"Invalid items type '{items}'. Allowed item types are: {', '.join(ALLOWED_TYPES.keys())}"
-                )
-            if not isinstance(items, str) and items not in ALLOWED_TYPES.values():
+            if isinstance(items, str):
+                if items not in ALLOWED_TYPES:
+                    raise ValueError(
+                        f"Invalid items type '{items}'. Allowed item types are: {', '.join(ALLOWED_TYPES.keys())}"
+                    )
+            elif isinstance(items, dict):
+                if items.get("type") != "object" or "properties" not in items:
+                    raise ValueError(
+                        "If 'items' is a dict, it must define an object with 'properties'."
+                    )
+                # Recursively validate properties of the object
+                for prop_name, prop_details in items["properties"].items():
+                    if "type" not in prop_details:
+                        raise ValueError(f"Missing 'type' for property '{prop_name}' in 'items'.")
+                    self.add(name=prop_name, field_type=prop_details["type"], description=prop_details.get("description"))
+            elif items not in ALLOWED_TYPES.values():
                 raise ValueError(
                     f"Invalid items type. Allowed item types are: {', '.join([t.__name__ for t in ALLOWED_TYPES.values()])}"
                 )
@@ -138,10 +150,20 @@ class Sculptor:
         }
 
     @classmethod
-    def from_config(cls, filepath: str) -> "Sculptor":
+    def from_config(cls, filepath: str, **kwargs: Any) -> "Sculptor":
         """Creates a Sculptor instance from a config file (JSON or YAML)."""
         config = load_config(filepath)
-        return cls(**config)
+
+        # Get the parameters of the Sculptor.__init__ method
+        init_params = inspect.signature(cls.__init__).parameters
+        # Filter the config to only include valid parameters
+        filtered_config = {k: v for k, v in config.items() if k in init_params}
+
+        # Merge the filtered config with any keyword arguments passed in,
+        # with kwargs taking precedence
+        combined_config = {**filtered_config, **kwargs}
+
+        return cls(**combined_config)
 
     def _build_schema_for_llm(self) -> Dict[str, Any]:
         """Builds a JSON schema for the LLM during inference."""
