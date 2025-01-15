@@ -3,6 +3,8 @@ from typing import Dict, Any, Optional, List, Type, Union
 from .utils import load_config
 import openai
 from string import Template
+import inspect
+import copy
 
 ALLOWED_TYPES = {
     "string": str,
@@ -70,127 +72,195 @@ class Sculptor:
     def _load_schema(self, schema: Dict[str, Dict[str, Any]]):
         """Loads the schema, validating the types and structure."""
         for field_name, field_data in schema.items():
-            field_type = field_data.get("type")
+            # Check for both 'field_type' and 'type' keys
+            field_type = field_data.get("field_type") or field_data.get("type")
             description = field_data.get("description", "")
             items = field_data.get("items")
             enum = field_data.get("enum")
-
-            self.add(
-                name=field_name,
-                field_type=field_type,
-                description=description,
-                items=items,
-                enum=enum
-            )
+            self.add(name=field_name, field_type=field_type, description=description, items=items, enum=enum)
 
     def add(
         self,
         name: str,
-        field_type: Union[str, Type] = str,
+        field_type: Union[str, type] = str,
         description: str = "",
-        items: Optional[Union[str, Type]] = None,
-        enum: Optional[List[Any]] = None
+        items: Optional[Union[str, type, Dict[str, Any]]] = None,
+        enum: Optional[List[Any]] = None,
     ):
         """
         Adds a field to the extraction schema.
 
         Args:
-            name (str): The name of the field.
-            field_type (Union[str, Type]): The type of the field (default: str).
-            description (str): A description of the field (default: "").
-            items (Optional[Union[str, Type]]): The type of items in the array, if field_type is list (default: None).
-            enum (Optional[List[Any]]): Allowed values if field_type is "enum" (default: None).
+            name (str): The field name.
+            field_type (Union[str, type]): e.g. "string", "boolean", "array", "enum",
+                                           or a Python type like str, bool, list, etc.
+            description (str): Write a short description for the field.
+            items: Used if field_type="array". Either another type/dict or "enum".
+            enum: A list of valid enumerated values, used if field_type="enum"
+                  or if (field_type="array" and items="enum"), or if you want the
+                  entire array enumerated as a top-level.
         """
 
-        if isinstance(field_type, str):
-            field_type = field_type.lower()
+        def normalize_type(t: Union[str, type]) -> str:
+            if isinstance(t, type):
+                t_lower = t.__name__.lower()
+            else:
+                t_lower = t.lower()
 
-        if field_type not in ALLOWED_TYPES and field_type not in ALLOWED_TYPES.values():
-            allowed_types_str = ", ".join(
-                [f"`{t}`" for t in ALLOWED_TYPES]
-            )
-            raise ValueError(
-                f"Invalid type '{field_type}'. Allowed types are: {allowed_types_str}"
-            )
-
-        if field_type == list or field_type == "array":
-            if items is None:
+            if t_lower in ("str", "string"):
+                return "string"
+            elif t_lower in ("bool", "boolean"):
+                return "boolean"
+            elif t_lower in ("int", "integer"):
+                return "integer"
+            elif t_lower in ("float", "number"):
+                return "number"
+            elif t_lower in ("dict", "object"):
+                return "object"
+            elif t_lower in ("list", "array"):
+                return "array"
+            elif t_lower in ("enum", "anyof"):
+                return t_lower
+            else:
                 raise ValueError(
-                    "For 'array' type, 'items' must specify the type of items in the array."
-                )
-            if isinstance(items, str) and items not in ALLOWED_TYPES:
-                raise ValueError(
-                    f"Invalid items type '{items}'. Allowed item types are: {', '.join(ALLOWED_TYPES.keys())}"
-                )
-            if not isinstance(items, str) and items not in ALLOWED_TYPES.values():
-                raise ValueError(
-                    f"Invalid items type. Allowed item types are: {', '.join([t.__name__ for t in ALLOWED_TYPES.values()])}"
+                    f"Unsupported or invalid type '{t_lower}'. "
+                    "Allowed types: string, boolean, integer, number, object, array, enum, anyOf"
                 )
 
-        if field_type == "enum" and enum is None:
-            raise ValueError("For 'enum' type, 'enum' must specify a list of allowed values.")
+        field_type_str = normalize_type(field_type)
+        processed_items = None
 
+        # Handle arrays specially
+        if field_type_str == "array":
+            # (A) If user wants a top-level enumerated array
+            #     e.g.: add(name="skills", field_type="array", enum=[["a"],["b"]]) => entire array must be one of these
+            if enum and items is None:
+                # We'll just store it; the final schema = {type: "array", enum: [...of arrays...] }
+                pass  # processed_items remains None, so "items" won't appear
+            else:
+                # (B) Normal array approach (or array of enumerated items)
+                if items is None:
+                    raise ValueError("For 'array' type, you must provide 'items' or supply 'enum' for an enumerated array.")
+
+                # If items="enum", that means each array item is enumerated
+                if isinstance(items, str) and items.lower() == "enum":
+                    # e.g. items="enum", enum=["infiltration","time_travel"]
+                    # => each item is type="string" with that enum
+                    if not enum:
+                        raise ValueError(
+                            "For 'array' + items='enum', please provide an `enum` list for the allowed item values."
+                        )
+                    processed_items = {
+                        "type": "string",
+                        "enum": enum,
+                    }
+                    enum = None  # so the parent doesn't claim 'enum' as well
+                elif isinstance(items, dict):
+                    # Possibly a nested object or more complex definition
+                    processed_items = items
+                else:
+                    # items is a str/type => convert to "string", "integer", etc.
+                    processed_items = normalize_type(items)
+
+        # If field_type="enum" but no enum array is provided
+        if field_type_str == "enum" and not enum:
+            raise ValueError("For 'enum' type, you must provide a list of allowed values via `enum`.")
+
+        # Lastly, store the field definition
         self.schema[name] = {
-            "type": field_type,
+            "type": field_type_str,
             "description": description,
-            "items": items,
+            "items": processed_items,
             "enum": enum,
         }
 
     @classmethod
-    def from_config(cls, filepath: str) -> "Sculptor":
+    def from_config(cls, filepath: str, **kwargs: Any) -> "Sculptor":
         """Creates a Sculptor instance from a config file (JSON or YAML)."""
         config = load_config(filepath)
-        return cls(**config)
+
+        # Get the parameters of the Sculptor.__init__ method
+        init_params = inspect.signature(cls.__init__).parameters
+        # Filter the config to only include valid parameters
+        filtered_config = {k: v for k, v in config.items() if k in init_params}
+
+        # Merge the filtered config with any keyword arguments passed in,
+        # with kwargs taking precedence
+        combined_config = {**filtered_config, **kwargs}
+
+        return cls(**combined_config)
 
     def _build_schema_for_llm(self) -> Dict[str, Any]:
-        """Builds a JSON schema for the LLM during inference."""
-        properties = {}
-        for field_name, meta in self.schema.items():
-            field_type = meta["type"]
+        """
+        Builds the final JSON Schema for the LLM, using self.schema (which is
+        already normalized to valid schema strings: 'string', 'boolean', etc.)
+        """
 
-            if isinstance(field_type, type):
-                if field_type == list:
-                    field_type = "array"  # Ensure list type is treated as "array"
+        def build_subschema(meta: Dict[str, Any]) -> Dict[str, Any]:
+            # Copy so we never modify the original in self.schema
+            node = copy.deepcopy(meta)
+            node_type = node["type"]  # Guaranteed to exist from add()
+
+            schema_def: Dict[str, Any] = {}
+            if "description" in node:
+                schema_def["description"] = node["description"]
+
+            if node_type == "object":
+                schema_def["type"] = "object"
+                # If you want an object with sub-properties, add them under node["properties"]
+                # by calling add(...) for each sub-field; otherwise you can define them manually
+                props = node.get("properties", {})
+                nested_props = {}
+                for prop_name, prop_meta in props.items():
+                    nested_props[prop_name] = build_subschema(prop_meta)
+
+                schema_def["properties"] = nested_props
+                schema_def["additionalProperties"] = False
+                schema_def["required"] = list(nested_props.keys())
+
+            elif node_type == "array":
+                schema_def["type"] = "array"
+                if "items" not in node or node["items"] is None:
+                    raise ValueError("Array schema is missing 'items' definition.")
+                items_meta = node["items"]
+
+                # If items is a dict, we might have nested objects/arrays
+                if isinstance(items_meta, dict):
+                    schema_def["items"] = build_subschema(items_meta)
                 else:
-                    field_type = [k for k, v in ALLOWED_TYPES.items() if v == field_type][0]
+                    # Otherwise, items_meta is a string like "string", "integer", "boolean"...
+                    schema_def["items"] = {"type": items_meta}
 
-            # Add null type for numeric fields to avoid defaulting to 0
-            needs_null = field_type in ["number", "integer"]
+            elif node_type in ("string", "number", "boolean", "integer"):
+                schema_def["type"] = node_type
 
-            if field_type == "array":
-                item_type = meta["items"]
-                if isinstance(item_type, type):
-                    item_type = [k for k, v in ALLOWED_TYPES.items() if v == item_type][0]
-                elif isinstance(item_type, str):
-                    item_type = item_type.lower()  # Convert string type to lowercase
+            elif node_type == "enum":
+                schema_def["type"] = "string"
+                if "enum" not in node or node["enum"] is None:
+                    raise ValueError("Missing 'enum' array for enum type.")
+                schema_def["enum"] = node["enum"]
 
-                if item_type == "enum":
-                    properties[field_name] = {
-                        "type": "array",
-                        "items": {"type": "string", "enum": meta["enum"]},
-                    }
-                else:
-                    properties[field_name] = {
-                        "type": "array",
-                        "items": {"type": item_type},
-                    }
-            elif field_type == "enum":
-                properties[field_name] = {"type": "string", "enum": meta["enum"]}
-            elif field_type == "anyOf":
-                properties[field_name] = {"anyOf": meta["anyOf"]}
+            elif node_type == "anyof":
+                schema_def["anyOf"] = node.get("anyOf", [])
+
             else:
-                properties[field_name] = {
-                    "type": [field_type, "null"] if needs_null else field_type
-                }
+                raise ValueError(f"Unsupported type '{node_type}' in build_subschema.")
 
+            return schema_def
+
+        # Build top-level object with each field in self.schema
+        top_properties = {}
+        for field_name, field_meta in self.schema.items():
+            top_properties[field_name] = build_subschema(field_meta)
+
+        # Return the final top-level schema
         return {
             "name": "extract_fields",
             "strict": True,
             "schema": {
                 "type": "object",
-                "properties": properties,
-                "required": list(self.schema.keys()),
+                "properties": top_properties,
+                "required": list(top_properties.keys()),
                 "additionalProperties": False,
             },
         }
