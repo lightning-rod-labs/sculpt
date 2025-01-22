@@ -300,7 +300,11 @@ class Sculptor:
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": self._build_user_message(data, schema_for_llm)},
                 ],
-                response_format={"type": "json_schema", "json_schema": schema_for_llm},
+                response_format = (
+                    {"type": "json_object", "json_schema": schema_for_llm}
+                    if "deepseek" in str(self.openai_client.base_url).lower()
+                    else {"type": "json_schema", "json_schema": schema_for_llm}
+                ),
                 temperature=0,
             )
             content = resp.choices[0].message.content.strip()
