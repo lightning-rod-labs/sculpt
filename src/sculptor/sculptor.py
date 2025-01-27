@@ -284,7 +284,7 @@ class Sculptor:
         message_parts = [
             f"INSTRUCTIONS \n```{self.instructions}```",
             f"INPUT \n```{self._format_input_data(data)}```",
-            f"SCHEMA \n```{json.dumps(schema["schema"], indent=2)}```",
+            f"SCHEMA \n```{json.dumps(schema['schema'], indent=2)}```",
         ]
         
         return "\n\n".join(message_parts)
@@ -309,6 +309,12 @@ class Sculptor:
                 temperature=0,
             )
             content = resp.choices[0].message.content.strip()
+            # Extract just the JSON object by finding the outermost braces
+            start = content.find('{')
+            end = content.rfind('}') + 1
+            if start >= 0 and end > start:
+                content = content[start:end]
+            
             extracted = json.loads(content)
             if isinstance(extracted, list) and len(extracted) == 1:
                 extracted = extracted[0]  # Some models wrap the output in a list
