@@ -5,6 +5,7 @@ import openai
 from string import Template
 import inspect
 import copy
+import time
 
 ALLOWED_TYPES = {
     "string": str,
@@ -289,53 +290,60 @@ class Sculptor:
         
         return "\n\n".join(message_parts)
 
-    def sculpt(self, data: Dict[str, Any], merge_input: bool = True) -> Dict[str, Any]:
+    def sculpt(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3) -> Dict[str, Any]:
         """Processes a single data item using the LLM."""
         schema_for_llm = self._build_schema_for_llm()
         
-        try:
-            resp = self.openai_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": self._build_user_message(data, schema_for_llm)},
-                ],
-                response_format = (
-                    {"type": "json_object", "json_schema": schema_for_llm}
-                    if ("deepseek" in str(self.openai_client.base_url).lower() or 
-                        "deepseek" in str(self.model).lower())
-                    else {"type": "json_schema", "json_schema": schema_for_llm}
-                ),
-                temperature=0,
-            )
-            content = resp.choices[0].message.content.strip()
-            # Extract just the JSON object by finding the outermost braces
-            start = content.find('{')
-            end = content.rfind('}') + 1
-            if start >= 0 and end > start:
-                content = content[start:end]
-            
-            extracted = json.loads(content)
-            if isinstance(extracted, list) and len(extracted) == 1:
-                extracted = extracted[0]  # Some models wrap the output in a list
-            
-            # Clean up any whitespace in keys
-            extracted = {k.strip(): v for k, v in extracted.items()}
-            
-        except Exception as e:
-            raise RuntimeError(f"LLM API call failed: {e}")
+        last_error = None
+        for attempt in range(retries):
+            try:
+                resp = self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": self._build_user_message(data, schema_for_llm)},
+                    ],
+                    response_format = (
+                        {"type": "json_object", "json_schema": schema_for_llm}
+                        if ("deepseek" in str(self.openai_client.base_url).lower() or 
+                            "deepseek" in str(self.model).lower())
+                        else {"type": "json_schema", "json_schema": schema_for_llm}
+                    ),
+                    temperature=attempt * 0.1,  # Increase temperature by 0.1 for each retry
+                )
+                content = resp.choices[0].message.content.strip()
+                # Extract just the JSON object by finding the outermost braces
+                start = content.find('{')
+                end = content.rfind('}') + 1
+                if start >= 0 and end > start:
+                    content = content[start:end]
+                
+                extracted = json.loads(content)
+                if isinstance(extracted, list) and len(extracted) == 1:
+                    extracted = extracted[0]  # Some models wrap the output in a list
+                
+                # Clean up any whitespace in keys
+                extracted = {k.strip(): v for k, v in extracted.items()}
+                
+                if not merge_input:
+                    return extracted
+                
+                # Check for field conflicts
+                conflicts = set(data.keys()) & set(extracted.keys())
+                if conflicts:
+                    import warnings
+                    warnings.warn(f"The following fields will be overwritten: {conflicts}")
+                
+                # Merge while giving priority to extracted fields
+                return {**data, **extracted}
 
-        if not merge_input:
-            return extracted
+            except Exception as e:
+                last_error = e
+                if attempt < retries - 1:  # Don't sleep on the last attempt
+                    time.sleep(1)  # Add a small delay between retries
+                continue
         
-        # Check for field conflicts
-        conflicts = set(data.keys()) & set(extracted.keys())
-        if conflicts:
-            import warnings
-            warnings.warn(f"The following fields will be overwritten: {conflicts}")
-        
-        # Merge while giving priority to extracted fields
-        return {**data, **extracted}
+        raise RuntimeError(f"LLM API call failed after {retries} attempts. Last error: {last_error}")
 
     def sculpt_batch(
         self,
@@ -343,6 +351,7 @@ class Sculptor:
         n_workers: int = 1,
         show_progress: bool = True,
         merge_input: bool = True,
+        retries: int = 3,
     ) -> List[Dict[str, Any]]:
         """Processes multiple data items using the LLM, with optional parallelization.
 
@@ -351,6 +360,7 @@ class Sculptor:
             n_workers: Number of parallel workers (default: 1). If > 1, enables parallel processing
             show_progress: Whether to show progress bar (default: True)
             merge_input: If True, merges input data with extracted fields (default: True)
+            retries: Number of times to retry failed attempts (default: 1)
         """
         from tqdm import tqdm
         from functools import partial
@@ -358,7 +368,7 @@ class Sculptor:
         if hasattr(data_list, "to_dict"):
             data_list = data_list.to_dict("records")
         # Create a partial function with fixed merge_input parameter
-        sculpt_with_merge = partial(self.sculpt, merge_input=merge_input)
+        sculpt_with_merge = partial(self.sculpt, merge_input=merge_input, retries=retries)
 
         if n_workers > 1:
             from concurrent.futures import ThreadPoolExecutor
