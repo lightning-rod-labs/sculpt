@@ -302,7 +302,8 @@ class Sculptor:
                 ],
                 response_format = (
                     {"type": "json_object", "json_schema": schema_for_llm}
-                    if "deepseek" in str(self.openai_client.base_url).lower()
+                    if ("deepseek" in str(self.openai_client.base_url).lower() or 
+                        "deepseek" in str(self.model).lower())
                     else {"type": "json_schema", "json_schema": schema_for_llm}
                 ),
                 temperature=0,
