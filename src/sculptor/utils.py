@@ -1,6 +1,8 @@
 from typing import Any, Dict
 import os
 
+DEFAULT_SYSTEM_PROMPT = "You are an AI extracting information into JSON format."
+
 def load_config(filepath: str) -> Dict[str, Any]:
     """
     Load and parse a configuration file with environment variable substitution.
