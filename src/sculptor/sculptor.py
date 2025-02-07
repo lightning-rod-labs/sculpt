@@ -6,6 +6,8 @@ from string import Template
 import inspect
 import copy
 import time
+import asyncio
+from tqdm import tqdm
 
 ALLOWED_TYPES = {
     "string": str,
@@ -32,6 +34,7 @@ class Sculptor:
         schema: Optional[Dict[str, Dict[str, Any]]] = None,
         model: str = "gpt-4o-mini",
         openai_client: Optional[openai.OpenAI] = None,
+        async_openai_client: Optional[openai.AsyncOpenAI] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         instructions: Optional[str] = "",
@@ -59,6 +62,11 @@ class Sculptor:
             self.openai_client = openai_client
         else:
             self.openai_client = openai.OpenAI(api_key=api_key, base_url=base_url)
+
+        if async_openai_client:
+            self.async_openai_client = async_openai_client
+        else:
+            self.async_openai_client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
 
         self.instructions = instructions.strip()
         self.system_prompt = system_prompt
@@ -290,27 +298,7 @@ class Sculptor:
         
         return "\n\n".join(message_parts)
 
-    def sculpt(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3) -> Dict[str, Any]:
-        """Processes a single data item using the LLM."""
-        schema_for_llm = self._build_schema_for_llm()
-        
-        last_error = None
-        for attempt in range(retries):
-            try:
-                resp = self.openai_client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": self._build_user_message(data, schema_for_llm)},
-                    ],
-                    response_format = (
-                        {"type": "json_object", "json_schema": schema_for_llm}
-                        if ("deepseek" in str(self.openai_client.base_url).lower() or 
-                            "deepseek" in str(self.model).lower())
-                        else {"type": "json_schema", "json_schema": schema_for_llm}
-                    ),
-                    temperature=attempt * 0.1,  # Increase temperature by 0.1 for each retry
-                )
+    def _parse_response(self, resp: Any, data: Dict[str, Any], merge_input: bool) -> Dict[str, Any]:
                 content = resp.choices[0].message.content.strip()
                 # Extract just the JSON object by finding the outermost braces
                 start = content.find('{')
@@ -337,12 +325,60 @@ class Sculptor:
                 # Merge while giving priority to extracted fields
                 return {**data, **extracted}
 
+    def sculpt(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3) -> Dict[str, Any]:
+        """Processes a single data item using the LLM synchronously."""
+        schema_for_llm = self._build_schema_for_llm()
+        last_error = None
+        for attempt in range(retries):
+            try:
+                resp = self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": self._build_user_message(data, schema_for_llm)},
+                    ],
+                    response_format=(
+                        {"type": "json_object", "json_schema": schema_for_llm}
+                        if ("deepseek" in str(self.openai_client.base_url).lower() or 
+                            "deepseek" in str(self.model).lower())
+                        else {"type": "json_schema", "json_schema": schema_for_llm}
+                    ),
+                    temperature=attempt * 0.1,
+                )
+                return self._parse_response(resp, data, merge_input)
             except Exception as e:
                 last_error = e
-                if attempt < retries - 1:  # Don't sleep on the last attempt
-                    time.sleep(1)  # Add a small delay between retries
+                if attempt < retries - 1:
+                    time.sleep(1)
                 continue
-        
+        raise RuntimeError(f"LLM API call failed after {retries} attempts. Last error: {last_error}")
+
+    async def async_sculpt(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3) -> Dict[str, Any]:
+        """Processes a single data item using the LLM asynchronously."""
+        schema_for_llm = self._build_schema_for_llm()
+        last_error = None
+        for attempt in range(retries):
+            try:
+                resp = await self.async_openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": self._build_user_message(data, schema_for_llm)},
+                    ],
+                    response_format=(
+                        {"type": "json_object", "json_schema": schema_for_llm}
+                        if ("deepseek" in str(self.openai_client.base_url).lower() or 
+                            "deepseek" in str(self.model).lower())
+                        else {"type": "json_schema", "json_schema": schema_for_llm}
+                    ),
+                    temperature=attempt * 0.1,
+                )
+                return self._parse_response(resp, data, merge_input)
+            except Exception as e:
+                last_error = e
+                if attempt < retries - 1:
+                    await asyncio.sleep(1)
+                continue
         raise RuntimeError(f"LLM API call failed after {retries} attempts. Last error: {last_error}")
 
     def sculpt_batch(
@@ -358,11 +394,10 @@ class Sculptor:
         Args:
             data_list: List of data dictionaries to process
             n_workers: Number of parallel workers (default: 1). If > 1, enables parallel processing
-            show_progress: Whether to show progress bar (default: True)
+            show_progress: Whether to show a progress bar (default: True)
             merge_input: If True, merges input data with extracted fields (default: True)
-            retries: Number of times to retry failed attempts (default: 1)
+            retries: Number of times to retry failed attempts (default: 3)
         """
-        from tqdm import tqdm
         from functools import partial
 
         if hasattr(data_list, "to_dict"):
@@ -391,3 +426,38 @@ class Sculptor:
                 results.append(sculpt_with_merge(item))
 
         return results
+
+    async def async_sculpt_batch(
+        self,
+        data_list: List[Dict[str, Any]],
+        show_progress: bool = True,
+        merge_input: bool = True,
+        retries: int = 3,
+        return_exceptions: bool = True,
+        include_exceptions_in_results: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Processes multiple data items using the LLM asynchronously,
+        leveraging asyncio.gather to run the tasks concurrently.
+        """
+        
+        if hasattr(data_list, "to_dict"):
+            data_list = data_list.to_dict("records")
+        
+        tasks = [
+            self.async_sculpt(item, merge_input=merge_input, retries=retries)
+            for item in data_list
+        ]
+        
+        results = []        
+        if show_progress:
+            for coro in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Processing items"):
+                result = await coro
+                results.append(result)
+        else:
+            results = await asyncio.gather(*tasks, return_exceptions=return_exceptions)
+
+        if include_exceptions_in_results:
+            return results
+        else:
+            return [r for r in results if not isinstance(r, Exception)]
