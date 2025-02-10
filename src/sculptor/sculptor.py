@@ -1,6 +1,6 @@
 import json
 from typing import Dict, Any, Optional, List, Type, Union
-from utils import load_config
+from .utils import load_config
 import openai
 from string import Template
 import inspect
