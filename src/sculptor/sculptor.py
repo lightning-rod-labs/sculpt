@@ -6,6 +6,7 @@ from string import Template
 import inspect
 import copy
 import time
+from asgiref.sync import sync_to_async
 
 ALLOWED_TYPES = {
     "string": str,
@@ -391,3 +392,11 @@ class Sculptor:
                 results.append(sculpt_with_merge(item))
 
         return results
+    
+    async def sculpt_async(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3) -> Dict[str, Any]:
+        """Processes a single data item using the LLM asynchronously."""
+        return await sync_to_async(self.sculpt)(data, merge_input, retries)
+    
+    async def sculpt_batch_async(self, data_list: List[Dict[str, Any]], n_workers: int = 100, show_progress: bool = True, merge_input: bool = True, retries: int = 3) -> List[Dict[str, Any]]:
+        """Processes multiple data items using the LLM asynchronously."""
+        return await sync_to_async(self.sculpt_batch)(data_list, n_workers, show_progress, merge_input, retries)
