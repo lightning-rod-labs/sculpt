@@ -88,7 +88,7 @@ class Sculptor:
         description: str = "",
         items: Optional[Union[str, type, Dict[str, Any]]] = None,
         enum: Optional[List[Any]] = None,
-    ):
+    ) -> Sculptor:
         """
         Adds a field to the extraction schema.
 
@@ -175,6 +175,8 @@ class Sculptor:
             "items": processed_items,
             "enum": enum,
         }
+
+        return self
 
     @classmethod
     def from_config(cls, filepath: str, **kwargs: Any) -> "Sculptor":
