@@ -291,7 +291,7 @@ class Sculptor:
         
         return "\n\n".join(message_parts)
 
-    def sculpt(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3) -> Dict[str, Any]:
+    def sculpt(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3, suppress_errors: bool = False) -> Dict[str, Any]:
         """Processes a single data item using the LLM."""
         schema_for_llm = self._build_schema_for_llm()
         
@@ -344,7 +344,10 @@ class Sculptor:
                     time.sleep(1)  # Add a small delay between retries
                 continue
         
-        raise RuntimeError(f"LLM API call failed after {retries} attempts. Last error: {last_error}")
+        if suppress_errors:
+            return None
+        else:
+            raise RuntimeError(f"LLM API call failed after {retries} attempts. Last error: {last_error}")
 
     def sculpt_batch(
         self,
@@ -353,6 +356,7 @@ class Sculptor:
         show_progress: bool = True,
         merge_input: bool = True,
         retries: int = 3,
+        suppress_errors: bool = False
     ) -> List[Dict[str, Any]]:
         """Processes multiple data items using the LLM, with optional parallelization.
 
@@ -369,7 +373,7 @@ class Sculptor:
         if hasattr(data_list, "to_dict"):
             data_list = data_list.to_dict("records")
         # Create a partial function with fixed merge_input parameter
-        sculpt_with_merge = partial(self.sculpt, merge_input=merge_input, retries=retries)
+        sculpt_with_merge = partial(self.sculpt, merge_input=merge_input, retries=retries, suppress_errors=suppress_errors)
 
         if n_workers > 1:
             from concurrent.futures import ThreadPoolExecutor
@@ -390,8 +394,7 @@ class Sculptor:
             iterator = tqdm(data_list, desc="Processing items") if show_progress else data_list
             for item in iterator:
                 results.append(sculpt_with_merge(item))
-
-        return results
+        return [result for result in results if result is not None]
     
     async def sculpt_async(self, data: Dict[str, Any], merge_input: bool = True, retries: int = 3) -> Dict[str, Any]:
         """Processes a single data item using the LLM asynchronously."""
