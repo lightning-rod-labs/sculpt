@@ -1,7 +1,7 @@
 # Notice:
 Sculptor is now Sculpt. Please update any imports to reference the new package name.
 
-# DataSculpt
+# Sculpt
 Simple structured data extraction with LLMs
 
 Sculptor streamlines structured data extraction from unstructured text using LLMs. Sculptor makes it easy to:
