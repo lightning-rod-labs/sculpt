@@ -3,9 +3,9 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sculptor"
-version = "0.1.32"
-description = "Sculptor: Structuring unstructured data with LLMs"
+name = "datasculpt"
+version = "0.1.33"
+description = "DataSculpt: Structuring unstructured data with LLMs"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
