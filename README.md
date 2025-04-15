@@ -1,4 +1,7 @@
-# Sculptor
+# Notice:
+Sculptor is now Sculpt. Please update any imports to reference the new package name.
+
+# Sculpt
 Simple structured data extraction with LLMs
 
 Sculptor streamlines structured data extraction from unstructured text using LLMs. Sculptor makes it easy to:
@@ -27,7 +30,7 @@ Sculptor provides two main classes:
 ### Installation
 
 ```bash
-pip install sculptor
+pip install sculpt
 ```
 
 Set your OpenAI API key as an environment variable:
@@ -40,7 +43,7 @@ export OPENAI_API_KEY="your-key"
 Below is a minimal example demonstrating how to configure a Sculptor to extract fields from a single record and a batch of records:
 
 ```python
-from sculptor.sculptor import Sculptor
+from sculpt.sculptor import Sculptor
 import pandas as pd
 
 # Example records
@@ -96,7 +99,7 @@ We can chain Sculptors together to create a pipeline.
 Continuing from the previous example, we use level_sculptor (with gpt-4o-mini) to filter the AI records, then use threat_sculptor (with gpt-4o) to analyze the filtered records.
 
 ```python
-from sculptor.sculptor_pipeline import SculptorPipeline
+from sculpt.sculptor_pipeline import SculptorPipeline
 
 # Detailed analysis with expensive model
 threat_sculptor = Sculptor(model="gpt-4o")
