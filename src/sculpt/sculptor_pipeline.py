@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Callable, Optional
 import logging
-from sculptor.sculptor import Sculptor
-from sculptor.utils import load_config
+from sculpt.sculptor import Sculptor
+from sculpt.utils import load_config
 
 class SculptorPipeline:
     """
