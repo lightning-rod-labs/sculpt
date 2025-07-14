@@ -39,6 +39,7 @@ class Sculptor:
         system_prompt: Optional[str] = DEFAULT_SYSTEM_PROMPT,
         template: Optional[str] = "",
         input_keys: Optional[List[str]] = None,
+        use_json_object_response_format: bool = False,
     ):
         """
         Initializes the Sculptor for LLM interaction and data extraction.
@@ -53,6 +54,7 @@ class Sculptor:
             system_prompt (Optional[str]): System prompt for the LLM (default: DEFAULT_SYSTEM_PROMPT).
             template (Optional[str]): Template for formatting input data in the prompt (default: "").
             input_keys (Optional[List[str]]): Keys to include if no template is provided (default: None).
+            use_json_object_response_format (bool): Some providers do not support json_schema response format and expect json_object instead (default: False).
         """
         self.model = model
         
@@ -66,6 +68,7 @@ class Sculptor:
         self.template = template.strip()
         self.input_keys = input_keys
         self.schema: Dict[str, Dict[str, Any]] = {}
+        self.use_json_object_response_format = use_json_object_response_format
 
         # Load schema if provided
         if schema:
@@ -298,6 +301,9 @@ class Sculptor:
         last_error = None
         for attempt in range(retries):
             try:
+                use_json_object_response_format = ("deepseek" in str(self.openai_client.base_url).lower() or 
+                            "deepseek" in str(self.model).lower() or "microsoft" in str(self.model).lower() or 
+                            self.use_json_object_response_format)
                 resp = self.openai_client.chat.completions.create(
                     model=self.model,
                     messages=[
@@ -305,10 +311,7 @@ class Sculptor:
                         {"role": "user", "content": self._build_user_message(data, schema_for_llm)},
                     ],
                     response_format = (
-                        {"type": "json_object", "json_schema": schema_for_llm}
-                        if ("deepseek" in str(self.openai_client.base_url).lower() or 
-                            "deepseek" in str(self.model).lower())
-                        else {"type": "json_schema", "json_schema": schema_for_llm}
+                        {"type": "json_object" if use_json_object_response_format else "json_schema", "json_schema": schema_for_llm}
                     ),
                     temperature=attempt * 0.1,  # Increase temperature by 0.1 for each retry
                 )
