@@ -301,6 +301,7 @@ class Sculptor:
         last_error = None
         for attempt in range(retries):
             try:
+                # Deepseek and Microsoft do not support json_schema response format
                 use_json_object_response_format = ("deepseek" in str(self.openai_client.base_url).lower() or 
                             "deepseek" in str(self.model).lower() or "microsoft" in str(self.model).lower() or 
                             self.use_json_object_response_format)
