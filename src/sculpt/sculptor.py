@@ -162,6 +162,8 @@ class Sculptor:
                     enum = None  # so the parent doesn't claim 'enum' as well
                 elif isinstance(items, dict):
                     # Possibly a nested object or more complex definition
+                    if "type" not in items:
+                        raise ValueError(f"Item definition is missing 'type' key. Items should have the format {{'type': 'object', 'properties': object_properties}}. Definition: {items}")
                     processed_items = items
                 else:
                     # items is a str/type => convert to "string", "integer", etc.
@@ -204,7 +206,9 @@ class Sculptor:
         def build_subschema(meta: Dict[str, Any]) -> Dict[str, Any]:
             # Copy so we never modify the original in self.schema
             node = copy.deepcopy(meta)
-            node_type = node["type"]  # Guaranteed to exist from add()
+            if "type" not in node:
+                raise ValueError(f"Schema field is missing 'type' key. Field data: {node}")
+            node_type = node["type"]
 
             schema_def: Dict[str, Any] = {}
             if "description" in node:
